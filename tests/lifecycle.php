@@ -85,3 +85,5 @@ try {
 	$product->delete( true );
 }
 echo 'Real WooCommerce lifecycle passed with mocked provider; sandbox E2E remains outstanding.' . PHP_EOL;
+
+require __DIR__ . '/merchant-wordpress.php';

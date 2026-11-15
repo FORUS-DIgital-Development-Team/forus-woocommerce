@@ -12,6 +12,7 @@ for (const file of files) {
 	assert.equal(/\b(?:eval|exec|shell_exec|system|passthru|unserialize|update_post_meta|get_post_meta|file_put_contents)\s*\(/i.test(text), false, file + ': unsafe API or non-HPOS access');
 	assert.equal(/\b(?:error_log|var_dump|print_r)\s*\(/.test(text), false, file + ': unredacted debugging');
 }
-assert.match(fs.readFileSync(path.join(root, 'includes/class-forus-api.php'), 'utf8'), /public function ready\(\): bool\s*\{[\s\S]*?return false;/);
+assert.match(fs.readFileSync(path.join(root, 'includes/class-forus-api.php'), 'utf8'), /FORUS_WC_ENABLE_TEST_CHECKOUT/);
+assert.match(fs.readFileSync(path.join(root, 'includes/class-forus-api.php'), 'utf8'), /'sandbox' ===/);
 assert.equal(/contents:\s*write|action-gh-release|gh release create/.test(fs.readFileSync(path.join(root, '.github/workflows/release.yml'), 'utf8')), false, 'No automatic publication');
 console.log('PASS source safeguards, formatting, HPOS access and release gate (' + files.length + ' PHP files).');

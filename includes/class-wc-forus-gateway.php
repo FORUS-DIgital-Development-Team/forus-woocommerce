@@ -10,7 +10,7 @@ class WC_FORUS_Gateway extends WC_Payment_Gateway {
 	public function __construct() {
 		$this->id = 'forus';
 		$this->method_title = 'FORUS';
-		$this->method_description = __( 'Hosted checkout. This development build is blocked pending verification of the merchant payment API. Do not install on a live merchant store.', 'forus-woocommerce' );
+		$this->method_description = __( 'Hosted checkout. Sandbox candidate using merchant-checkout-v1. Provider/store acceptance is outstanding; live payments and refunds are disabled.', 'forus-woocommerce' );
 		$this->has_fields = false;
 		$this->supports = array( 'products' );
 		$this->init_form_fields();
@@ -49,8 +49,8 @@ class WC_FORUS_Gateway extends WC_Payment_Gateway {
 			'merchant' => (string) $this->get_option( 'merchant_id', '' ),
 			'api_hosts' => array( $host ),
 			'checkout_hosts' => array_values( array_filter( array_map( 'trim', explode( ',', strtolower( (string) $this->get_option( 'checkout_hosts', '' ) ) ) ) ) ),
-			// Empty until the backend's supported currencies and exponents are verified.
-			'currencies' => array(),
+			// The versioned sandbox merchant contract accepts ZAR minor units only.
+			'currencies' => array( 'ZAR' => 2 ),
 		);
 	}
 
@@ -77,8 +77,8 @@ class WC_FORUS_Gateway extends WC_Payment_Gateway {
 	}
 
 	public function admin_options() {
-		echo '<h2>FORUS</h2><p><strong>' . esc_html__( 'Release status: BLOCKED — merchant contract and sandbox verification outstanding.', 'forus-woocommerce' ) . '</strong></p>';
-		echo '<p>' . esc_html__( 'Existing credentials and environment settings are retained. No new payments or refunds are sent by this build. Payment-method and country availability must be confirmed for your merchant.', 'forus-woocommerce' ) . '</p>';
+		echo '<h2>FORUS</h2><p><strong>' . esc_html__( 'Release status: sandbox candidate — live payments and refunds are disabled.', 'forus-woocommerce' ) . '</strong></p>';
+		echo '<p>' . esc_html__( 'Existing settings are retained. Sandbox checkout requires explicit test opt-in and a matching backend deployment. Provider/store acceptance is still required.', 'forus-woocommerce' ) . '</p>';
 		echo '<p>Webhook URL: <code>' . esc_html( add_query_arg( 'wc-api', 'forus_webhook', home_url( '/' ) ) ) . '</code></p>';
 		echo '<p><a href="https://github.com/FORUS-DIgital-Development-Team/forus-woocommerce">' . esc_html__( 'Merchant documentation and release status', 'forus-woocommerce' ) . '</a></p>';
 		parent::admin_options();
@@ -93,16 +93,22 @@ class WC_FORUS_Gateway extends WC_Payment_Gateway {
 		}
 		check_admin_referer( 'forus_connection_test', 'forus_test_nonce' );
 		$result = $this->api->capabilities();
-		wp_die( esc_html( is_wp_error( $result ) ? $result->get_error_message() : 'Sandbox connection verified. Payment execution remains blocked.' ), 'FORUS connection test', array( 'response' => 200, 'back_link' => true ) );
+		wp_die( esc_html( is_wp_error( $result ) ? $result->get_error_message() : 'Sandbox merchant connection verified. This does not establish provider acceptance or enable live payments.' ), 'FORUS connection test', array( 'response' => 200, 'back_link' => true ) );
 	}
 
 	public function process_payment( $order_id ): array {
+		if ( ! $this->is_available() ) {
+			return array( 'result' => 'failure' );
+		}
 		$result = $this->service->create( (int) $order_id );
 		if ( is_wp_error( $result ) ) {
 			wc_add_notice( __( 'FORUS checkout is currently unavailable. Please select another payment method or contact the merchant.', 'forus-woocommerce' ), 'error' );
 			return array( 'result' => 'failure' );
 		}
 		$order = wc_get_order( $order_id );
+		if ( $order->is_paid() ) {
+			return array( 'result' => 'success', 'redirect' => $this->get_return_url( $order ) );
+		}
 		return array( 'result' => 'success', 'redirect' => add_query_arg( array( 'wc-api' => 'forus_checkout', 'order_id' => $order->get_id(), 'key' => $order->get_order_key() ), home_url( '/' ) ) );
 	}
 
@@ -137,6 +143,13 @@ class WC_FORUS_Gateway extends WC_Payment_Gateway {
 		$order = wc_get_order( $id );
 		if ( ! $this->api->ready() || ! $order || 'forus' !== $order->get_payment_method() || '' === $key || ! hash_equals( $order->get_order_key(), $key ) || ! in_array( $order->get_status(), array( 'pending', 'failed' ), true ) || (int) $order->get_meta( '_forus_checkout_expires' ) < time() ) {
 			wp_die( 'FORUS checkout is unavailable or expired.', '', array( 'response' => 403 ) );
+		}
+		$evidence = $this->api->status( (string) $order->get_meta( '_forus_payment_session_id' ) );
+		$snapshot = $order->get_meta( '_forus_snapshot' );
+		if ( is_wp_error( $evidence ) || ! is_array( $snapshot ) || ! FORUS_Policy::evidence_matches( $evidence, $snapshot )
+			|| 'pending' !== $evidence['status'] || $order->get_currency() !== $snapshot['currency']
+			|| FORUS_Policy::minor( (string) $order->get_total(), $snapshot['decimals'] ) !== $snapshot['amount'] ) {
+			wp_die( 'Payment status must be reconciled before checkout can continue.', '', array( 'response' => 409 ) );
 		}
 		$url = $order->get_meta( '_forus_checkout_url' );
 		$fields = $order->get_meta( '_forus_checkout_fields' );

@@ -34,14 +34,29 @@ final class FORUS_Service {
 				if ( 'ready' === $operation['state'] && $order->get_meta( '_forus_checkout_expires' ) > time() && $order->get_meta( '_forus_checkout_fields' ) ) {
 					return array( 'session' => $order->get_meta( '_forus_payment_session_id' ) );
 				}
-				// Never retry an ambiguous financial POST, even after a worker crash.
-				return $this->error( 'reconciliation_required' );
+				// Only the versioned adapter with database-backed idempotency may retry.
+				if ( ! method_exists( $this->api, 'can_retry_create' ) || ! $this->api->can_retry_create() ) {
+					return $this->error( 'reconciliation_required' );
+				}
+			} else {
+				$operation = array( 'key' => wp_generate_uuid4(), 'snapshot' => $snapshot, 'state' => 'unknown' );
 			}
-			$operation = array( 'key' => wp_generate_uuid4(), 'snapshot' => $snapshot, 'state' => 'unknown' );
 			$order->update_meta_data( '_forus_create_operation', $operation );
 			$order->save();
 			$result = $this->api->create( $snapshot, $operation['key'] );
+			if ( is_array( $result ) && isset( $result['session'] ) && in_array( $result['status'] ?? '', array( 'completed', 'failed' ), true )
+				&& FORUS_Policy::evidence_matches( $result, $snapshot + array( 'session' => $result['session'] ) ) ) {
+				$snapshot['session'] = $result['session'];
+				$order->update_meta_data( '_forus_snapshot', $snapshot );
+				$order->update_meta_data( '_forus_payment_session_id', $result['session'] );
+				$order->save();
+				$verified = $this->apply_status( $order );
+				return ! is_wp_error( $verified ) && $order->is_paid() ? array( 'session' => $result['session'] ) : $this->error( 'reconciliation_required' );
+			}
 			if ( is_wp_error( $result ) || ! is_array( $result ) || ! $this->valid_checkout( $result ) ) {
+				if ( method_exists( $this->api, 'can_retry_create' ) && $this->api->can_retry_create() ) {
+					$this->schedule( $order );
+				}
 				return $this->error( 'reconciliation_required' );
 			}
 			$snapshot['session'] = $result['session'];
@@ -68,21 +83,27 @@ final class FORUS_Service {
 		}
 		$id = $event['data']['metadata']['order_id'] ?? null;
 		$session = $event['data']['id'] ?? null;
-		// Rail Connector PR #29 emits string-valued metadata and an ISO UTC
-		// createdAt inside the signed body. Never invent an unsigned header.
+		// Order metadata only routes the wake-up signal; authenticated status supplies evidence.
 		if ( is_string( $id ) && preg_match( '/^[1-9][0-9]*$/D', $id ) && strlen( $id ) <= strlen( (string) PHP_INT_MAX ) && (string) (int) $id === $id ) {
 			$id = (int) $id;
 		}
 		if ( ! is_int( $id ) || $id <= 0 || ! is_string( $session ) || '' === $session ) {
 			return $this->error( 'event' );
 		}
-		$created = $event['createdAt'] ?? null;
-		if ( ! is_string( $created ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/D', $created ) ) {
-			return $this->error( 'event' );
-		}
-		$timestamp = DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i:s.v\Z', $created, new DateTimeZone( 'UTC' ) );
-		if ( false === $timestamp || $timestamp->format( 'Y-m-d\TH:i:s.v\Z' ) !== $created || abs( time() - $timestamp->getTimestamp() ) > 300 ) {
-			return $this->error( 'event' );
+		if ( array_key_exists( 'created_at', $event ) ) {
+			if ( isset( $event['createdAt'] ) || ! is_int( $event['created_at'] ) || abs( time() - $event['created_at'] ) > 300 ) {
+				return $this->error( 'event' );
+			}
+		} else {
+			// Legacy signed timestamp fixtures remain accepted only as wake-up signals.
+			$created = $event['createdAt'] ?? null;
+			if ( ! is_string( $created ) || ! preg_match( '/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/D', $created ) ) {
+				return $this->error( 'event' );
+			}
+			$timestamp = DateTimeImmutable::createFromFormat( '!Y-m-d\\TH:i:s.v\\Z', $created, new DateTimeZone( 'UTC' ) );
+			if ( false === $timestamp || $timestamp->format( 'Y-m-d\\TH:i:s.v\\Z' ) !== $created || abs( time() - $timestamp->getTimestamp() ) > 300 ) {
+				return $this->error( 'event' );
+			}
 		}
 		if ( ! in_array( $event['type'], array( 'payment.completed', 'payment.failed', 'payment.cancelled' ), true ) ) {
 			return $this->error( 'event' );
@@ -113,6 +134,11 @@ final class FORUS_Service {
 	public function reconcile( int $id ) {
 		if ( ! $this->api->ready() ) {
 			return $this->error( 'contract_unverified' );
+		}
+		$order = wc_get_order( $id );
+		if ( $order && ! $order->get_meta( '_forus_payment_session_id' ) && is_array( $order->get_meta( '_forus_create_operation' ) )
+			&& method_exists( $this->api, 'can_retry_create' ) && $this->api->can_retry_create() ) {
+			return $this->create( $id );
 		}
 		return $this->store->locked( $id, function ( $order ) {
 			$result = $this->apply_status( $order );
@@ -184,6 +210,9 @@ final class FORUS_Service {
 	}
 
 	public function refund( int $id, $amount, string $reason ) {
+		if ( method_exists( $this->api, 'supports_refunds' ) && ! $this->api->supports_refunds() ) {
+			return $this->error( 'refund_unavailable' );
+		}
 		if ( ! $this->api->ready() ) {
 			return $this->error( 'contract_unverified' );
 		}

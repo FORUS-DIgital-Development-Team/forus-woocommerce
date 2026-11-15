@@ -1,3 +1,17 @@
+## Merchant checkout integration — 15 November 2026
+
+This revision connects the consolidated plugin architecture to **Rail Connector PR #90** and its `forus-merchant-checkout-v1` contract. It replaces the previous fully blocked HTTP adapter for explicitly opted-in sandbox installations only. Existing lifecycle/refund safeguards and tests are retained.
+
+- Set `FORUS_WC_ENABLE_TEST_CHECKOUT` to true in a staging wp-config.php only after deploying the matching backend and configuring the store. Save the verified HTTPS API base including /v1, a forus_test_sk_* key with payment read/write scopes, registered tenant, 32+ character webhook secret and approved provider checkout hosts. ZAR is the only supported currency.
+- Live keys, live mode and automatic provider refunds remain disabled. No live deployment or provider acceptance is claimed.
+- The merchant capabilities endpoint now verifies the test merchant configuration. Payment creation uses stable wire snapshots and database-backed backend idempotency. Lost creation responses can be recovered using the same reference/request.
+- New merchant events carry signed integer created_at timestamps. Webhooks remain wake-up signals; an authenticated, tenant-scoped status read independently verifies order evidence before completion.
+- The status endpoint reports durable verified callback state, not independent provider settlement reconciliation.
+- Tests now include the actual HTTP adapter with mocked backend responses in both the PHP matrix and real WooCommerce HPOS on/off lifecycle jobs. Check this revision's Actions results; earlier results below apply only to their named commits.
+- Remaining deployment blockers: target WordPress URL/access; provisioned backend sandbox credentials, merchant registration, public callback routing and delivery scheduler; actual provider sandbox/browser acceptance; safe provider refunds and live release enablement.
+
+The historical blocked-adapter/PR #29 descriptions below apply to earlier revisions and are superseded by this section. The matching backend runbook is `docs/merchant-checkout-acceptance.md` in Rail Connector PR #90.
+
 # FORUS WooCommerce Payment Gateway 1.1.0 development candidate
 
 **BLOCKED development build. Do not install on a live merchant store.**
