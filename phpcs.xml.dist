@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<ruleset name="FORUS baseline">
+  <description>Focused baseline; full WordPress standards remain a release review item.</description>
+  <file>forus-woocommerce.php</file>
+  <file>includes</file>
+  <rule ref="Generic.PHP.Syntax"/>
+  <rule ref="Generic.PHP.DisallowShortOpenTag"/>
+  <rule ref="Generic.WhiteSpace.DisallowSpaceIndent"/>
+  <rule ref="Squiz.WhiteSpace.SuperfluousWhitespace"/>
+</ruleset>

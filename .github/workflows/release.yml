@@ -1,13 +1,16 @@
-name: Validate WooCommerce candidate
+name: Validate and package blocked development build
 on:
-  push:
-    branches: [master, feature/woocommerce-v1.1-hardening]
-  pull_request:
   workflow_dispatch:
+  pull_request:
+  push:
+    branches: [master, 'feature/woocommerce-v1.1-hardening']
 permissions:
   contents: read
+concurrency:
+  group: forus-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  regression:
+  unit:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -18,31 +21,91 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
+          tools: phpcs:3.13.6
           coverage: none
-      - name: Lint every PHP file
-        run: find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
-      - name: Check Blocks JavaScript syntax
-        run: node --check includes/blocks.js
-      - name: Security and gateway behavior
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: PHP syntax and coding baseline
         run: |
-          php tests/security.php
-          php tests/gateway.php
-          php tests/gateway.php --release-gate
+          find . -path './.git' -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
+          phpcs --standard=phpcs.xml.dist
+      - name: Regression and source checks
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          php tests/run.php | tee test-results/php-${{ matrix.php }}.txt
+          node --test tests/blocks.test.mjs | tee test-results/blocks.txt
+          node scripts/check-source.mjs | tee test-results/source.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tests-php-${{ matrix.php }}
+          path: test-results/
+  wordpress:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        hpos: ['yes', 'no']
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: disposable_test_password
+          MYSQL_DATABASE: wordpress
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -pdisposable_test_password"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mysqli
+          tools: wp-cli
+          coverage: none
+      - name: Install disposable WordPress and WooCommerce
+        run: |
+          mkdir .test-site
+          wp core download --path=.test-site
+          wp config create --path=.test-site --dbname=wordpress --dbuser=root --dbpass=disposable_test_password --dbhost=127.0.0.1:3306
+          wp core install --path=.test-site --url=http://localhost:8080 --title=FORUS-test --admin_user=testadmin --admin_password=disposable_admin_password --admin_email=test@example.test --skip-email
+          wp plugin install woocommerce --activate --path=.test-site
+          ln -s "$GITHUB_WORKSPACE" .test-site/wp-content/plugins/forus-woocommerce
+          wp plugin activate forus-woocommerce --path=.test-site
+          wp option update woocommerce_custom_orders_table_enabled '${{ matrix.hpos }}' --path=.test-site
+      - name: Real order storage and merchant configuration
+        env:
+          FORUS_WC_TEST_ENV: '1'
+          FORUS_EXPECT_HPOS: ${{ matrix.hpos }}
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          wp eval-file "$GITHUB_WORKSPACE/tests/lifecycle.php" --path=.test-site | tee test-results/integration-${{ matrix.hpos }}.txt
+          wp core version --path=.test-site >> test-results/integration-${{ matrix.hpos }}.txt
+          wp plugin get woocommerce --field=version --path=.test-site >> test-results/integration-${{ matrix.hpos }}.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wordpress-hpos-${{ matrix.hpos }}
+          path: test-results/
   package:
-    needs: regression
+    needs: [unit, wordpress]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build development artifact only
-        run: |
-          mkdir -p build/forus-woocommerce
-          cp forus-woocommerce.php README.md build/forus-woocommerce/
-          cp -r includes build/forus-woocommerce/
-          cd build
-          zip -r ../forus-woocommerce-1.1.0-dev.zip forus-woocommerce
+      - name: Build and validate archive
+        shell: pwsh
+        run: ./scripts/build.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: forus-woocommerce-1.1.0-dev
-          path: forus-woocommerce-1.1.0-dev.zip
-          retention-days: 14
-
+          name: forus-woocommerce-v1.1.0-BLOCKED-development-only
+          path: |
+            dist/forus-woocommerce-v1.1.0.zip
+            dist/forus-woocommerce-v1.1.0.zip.sha256
+            docs/RELEASE-READINESS.md
+            CHANGELOG.md
+          retention-days: 30
+      # No tag publication job: all release gates and explicit approval required.
