@@ -10,9 +10,12 @@ class WC_FORUS_Gateway extends WC_Payment_Gateway {
 	public function __construct() {
 		$this->id = 'forus';
 		$this->method_title = 'FORUS';
-		$this->method_description = __( 'Hosted checkout. Sandbox candidate using merchant-checkout-v1. Provider/store acceptance is outstanding; live payments and refunds are disabled.', 'forus-woocommerce' );
+		$this->method_description = __( 'Hosted checkout. Sandbox candidate using merchant-checkout-v1. Live payments are disabled. Sandbox refunds require separate opt-in and provider acceptance.', 'forus-woocommerce' );
 		$this->has_fields = false;
 		$this->supports = array( 'products' );
+		if ( defined( 'FORUS_WC_ENABLE_TEST_REFUNDS' ) && true === FORUS_WC_ENABLE_TEST_REFUNDS ) {
+			$this->supports[] = 'refunds';
+		}
 		$this->init_form_fields();
 		$this->init_settings();
 		$this->title = $this->get_option( 'title', 'FORUS' );
@@ -77,7 +80,7 @@ class WC_FORUS_Gateway extends WC_Payment_Gateway {
 	}
 
 	public function admin_options() {
-		echo '<h2>FORUS</h2><p><strong>' . esc_html__( 'Release status: sandbox candidate — live payments and refunds are disabled.', 'forus-woocommerce' ) . '</strong></p>';
+		echo '<h2>FORUS</h2><p><strong>' . esc_html__( 'Release status: sandbox candidate. Live payments are disabled; sandbox refunds require separate opt-in.', 'forus-woocommerce' ) . '</strong></p>';
 		echo '<p>' . esc_html__( 'Existing settings are retained. Sandbox checkout requires explicit test opt-in and a matching backend deployment. Provider/store acceptance is still required.', 'forus-woocommerce' ) . '</p>';
 		echo '<p>Webhook URL: <code>' . esc_html( add_query_arg( 'wc-api', 'forus_webhook', home_url( '/' ) ) ) . '</code></p>';
 		echo '<p><a href="https://github.com/FORUS-DIgital-Development-Team/forus-woocommerce">' . esc_html__( 'Merchant documentation and release status', 'forus-woocommerce' ) . '</a></p>';

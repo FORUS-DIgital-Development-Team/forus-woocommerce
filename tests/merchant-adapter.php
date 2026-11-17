@@ -53,4 +53,38 @@ $GLOBALS['http_result'] = array( 'response' => array( 'code' => 200 ), 'body' =>
 	'contract' => 'forus-merchant-checkout-v1', 'merchant_id' => $config['merchant'], 'environment' => 'test',
 	'currency' => 'ZAR', 'status' => true, 'refunds' => false, 'live' => false ) ) );
 check( ! is_wp_error( $api->capabilities() ), 'Authenticated merchant connection check' );
+
+define( 'FORUS_WC_ENABLE_TEST_REFUNDS', true );
+$capabilities = json_decode( $GLOBALS['http_result']['body'], true );
+$capabilities['refunds'] = true;
+$data['environment'] = 'test'; $data['status'] = 'completed';
+$GLOBALS['refund_posts'] = 0;
+$GLOBALS['http_result'] = static function ( $url, $args ) use ( $capabilities, $data ) {
+	if ( false !== strpos( $url, 'merchant-capabilities' ) ) {
+		return array( 'response' => array( 'code' => 200 ), 'body' => json_encode( $capabilities ) );
+	}
+	if ( isset( $args['body'] ) ) {
+		++$GLOBALS['refund_posts'];
+		$GLOBALS['refund_wire'] = json_decode( $args['body'], true );
+		return new WP_Error( 'timeout', 'Lost refund response' );
+	}
+	$evidence = $data;
+	$evidence['refund'] = $GLOBALS['refund_wire']['requestKey'];
+	$evidence['amount'] = $GLOBALS['refund_wire']['amountMinor'];
+	return array( 'response' => array( 'code' => 200 ), 'body' => json_encode( $evidence ) );
+};
+check( is_wp_error( $service->refund( 42, '1.00', 'Recoverable fixture' ) ), 'Lost refund response does not claim completion' );
+$operation = $order->get_meta( '_forus_refund_operation' );
+check( $operation['key'] === $operation['refund'] && $operation['key'] === $GLOBALS['refund_wire']['requestKey'], 'Caller lookup key persisted before POST' );
+check( is_wp_error( $service->refund( 42, '1.00', 'Recoverable fixture' ) ) && 1 === $GLOBALS['refund_posts'], 'Unknown refund cannot issue a second POST' );
+check( true === $service->reconcile_refund( 42 ) && '1' === $order->refunded, 'GET recovery records confirmed refund locally' );
+check( true === $service->reconcile_refund( 42 ) && 1 === $GLOBALS['local_refund_calls'] && 1 === $GLOBALS['refund_posts'], 'Repeated recovery cannot duplicate provider or local refund' );
+check( 'accounted' === $order->get_meta( '_forus_refund_operation' )['local_handling'], 'Recovered accounting checkpoint persisted' );
+$response = $data; $response['refund'] = $operation['refund']; $response['amount'] = 100;
+$response['merchant_id'] = 'wrong';
+$GLOBALS['http_result'] = array( 'response' => array( 'code' => 200 ), 'body' => json_encode( $response ) );
+check( is_wp_error( $api->refund_status( $session, $operation['refund'] ) ), 'Cross-merchant refund evidence rejected' );
+$response['merchant_id'] = $config['merchant']; $response['refund'] = '99999999-9999-4999-8999-999999999999';
+$GLOBALS['http_result']['body'] = json_encode( $response );
+check( is_wp_error( $api->refund_status( $session, $operation['refund'] ) ), 'Wrong refund key rejected' );
 echo 'All ' . $GLOBALS['checks'] . ' merchant adapter assertions passed.' . PHP_EOL;

@@ -10,6 +10,8 @@ class FORUS_Integration_Adapter implements FORUS_Adapter {
 	public string $payment_state = 'pending';
 	public int $creates = 0;
 	public int $refunds = 0;
+	public bool $lose_refund_response = false;
+	public array $last_refund = array();
 	public function ready(): bool { return true; }
 	public function create( array $request, string $key ) {
 		++$this->creates;
@@ -19,9 +21,10 @@ class FORUS_Integration_Adapter implements FORUS_Adapter {
 	public function status( string $session ) { return $this->snapshot + array( 'status' => $this->payment_state ); }
 	public function refund( string $session, int $amount, string $reason, string $key ) {
 		++$this->refunds;
-		return array_replace( $this->snapshot, array( 'amount' => $amount, 'refund' => 'refund-' . $key, 'status' => 'completed' ) );
+		$this->last_refund = array_replace( $this->snapshot, array( 'amount' => $amount, 'refund' => $key, 'status' => 'completed' ) );
+		return $this->lose_refund_response ? new WP_Error( 'timeout', 'Simulated lost response' ) : $this->last_refund;
 	}
-	public function refund_status( string $session, string $refund ) { return new WP_Error( 'unused', 'Unused in this lifecycle test.' ); }
+	public function refund_status( string $session, string $refund ) { return $this->last_refund; }
 }
 $config = array( 'environment' => 'sandbox', 'merchant' => 'test-merchant', 'base' => 'https://api.example.test/v1', 'api_hosts' => array( 'api.example.test' ), 'checkout_hosts' => array( 'checkout.example.test' ), 'key' => 'fixture-only', 'secret' => str_repeat( 's', 32 ), 'currencies' => array( 'ZAR' => 2 ) );
 $product = new WC_Product_Simple();
@@ -85,5 +88,29 @@ try {
 	$product->delete( true );
 }
 echo 'Real WooCommerce lifecycle passed with mocked provider; sandbox E2E remains outstanding.' . PHP_EOL;
+
+$recovery_order = wc_create_order();
+try {
+	$recovery_order->set_currency( 'ZAR' ); $recovery_order->set_payment_method( 'forus' );
+	$recovery_order->set_total( '100.00' ); $recovery_order->save();
+	$adapter = new FORUS_Integration_Adapter();
+	$service = new FORUS_Service( $adapter, new FORUS_Store(), $config );
+	$id = $recovery_order->get_id();
+	forus_integration_assert( ! is_wp_error( $service->create( $id ) ), 'Recovery fixture session created' );
+	$adapter->payment_state = 'completed'; $service->reconcile( $id );
+	$adapter->lose_refund_response = true;
+	forus_integration_assert( is_wp_error( $service->refund( $id, '25.00', 'Lost response fixture' ) ), 'Lost response leaves durable refund journal' );
+	forus_integration_assert( true === $service->reconcile( $id ), 'Scheduled recovery reads provider refund status' );
+	forus_integration_assert( 25.0 === (float) wc_get_order( $id )->get_total_refunded(), 'Recovery records exact partial refund in WooCommerce' );
+	forus_integration_assert( true === $service->reconcile_refund( $id ) && 1 === count( wc_get_order( $id )->get_refunds() ) && 1 === $adapter->refunds, 'Recovery is idempotent locally and remotely' );
+	$adapter->lose_refund_response = false;
+	forus_integration_assert( true === $service->refund( $id, '75.00', 'Remaining balance' ), 'Recovered partial refund permits remaining balance' );
+	$final = wc_create_refund( array( 'order_id' => $id, 'amount' => 75, 'refund_payment' => false ) );
+	forus_integration_assert( ! is_wp_error( $final ) && 100.0 === (float) wc_get_order( $id )->get_total_refunded(), 'Recovered and synchronous refunds total the original payment' );
+} finally {
+	as_unschedule_all_actions( 'forus_reconcile_order', array( $recovery_order->get_id() ), 'forus' );
+	foreach ( wc_get_order( $recovery_order->get_id() )->get_refunds() as $refund ) { $refund->delete( true ); }
+	$recovery_order->delete( true );
+}
 
 require __DIR__ . '/merchant-wordpress.php';
