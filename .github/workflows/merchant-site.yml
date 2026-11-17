@@ -2,8 +2,6 @@ name: Validate merchant demonstration site
 on:
   pull_request:
     paths: ['deploy/merchant-site/**', '.github/workflows/merchant-site.yml']
-  push:
-    branches: ['feature/merchant-site-provisioning']
 permissions:
   contents: read
 concurrency:

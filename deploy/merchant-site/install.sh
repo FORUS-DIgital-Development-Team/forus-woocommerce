@@ -54,7 +54,8 @@ done
 dc exec -T wordpress test -s /var/www/html/wp-config.php
 if ! wp core is-installed; then
   dc run --rm --no-deps --user 0:0 --entrypoint sh cli -c \
-    'wp core install --allow-root --url="$SITE_URL" --title="FORUS Merchant Demo" --admin_user=forus-admin --admin_email="$ADMIN_EMAIL" --skip-email --prompt=admin_password < /run/secrets/admin_password'
+    'wp core install --allow-root --url="$SITE_URL" --title="FORUS Merchant Demo" --admin_user=forus-admin --admin_email="$ADMIN_EMAIL" --skip-email --admin_password="$(cat /run/secrets/admin_password)"'
+  chown -R 33:33 state/wordpress
 fi
 if ! wp plugin is-installed woocommerce; then
   wp plugin install woocommerce --activate

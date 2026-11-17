@@ -57,7 +57,7 @@ gcloud compute resource-policies create snapshot-schedule "$name-daily" --projec
 gcloud compute instances create "$name" --project="$PROJECT_ID" --zone="$zone" --machine-type=e2-medium \
   --network-interface="subnet=$name,address=$ip" --tags="$name" \
   --image-family=ubuntu-2404-lts-amd64 --image-project=ubuntu-os-cloud \
-  --boot-disk-size=50GB --boot-disk-type=pd-balanced --boot-disk-auto-delete=no \
+  --boot-disk-size=50GB --boot-disk-type=pd-balanced --no-boot-disk-auto-delete \
   --no-service-account --no-scopes --shielded-secure-boot \
   --metadata=enable-oslogin=TRUE,block-project-ssh-keys=TRUE \
   --labels=app=forus-merchant,environment=test --deletion-protection

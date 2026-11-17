@@ -42,11 +42,13 @@ services:
   cli:
     image: ${CLI_IMAGE:-wordpress:cli-php8.3}
     profiles: [tools]
+    entrypoint: [wp]
     user: '33:33'
     environment:
       <<: *wp-environment
       SITE_URL: ${SITE_URL:-https://merchant.forus.digital}
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL}
+      WP_CLI_CACHE_DIR: /tmp/wp-cli-cache
     secrets: [db_password, admin_password]
     volumes:
       - ./state/wordpress:/var/www/html
