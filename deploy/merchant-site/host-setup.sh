@@ -21,4 +21,6 @@ bash install.sh
 # A daily transaction-consistent database export accompanies the off-host disk snapshots.
 printf '17 1 * * * root /bin/bash /opt/forus-merchant/deploy/merchant-site/backup.sh >> /var/log/forus-merchant-backup.log 2>&1\n' > /etc/cron.d/forus-merchant-backup
 chmod 644 /etc/cron.d/forus-merchant-backup
+printf '* * * * * root /bin/bash /opt/forus-merchant/deploy/merchant-site/run-cron.sh >> /var/log/forus-merchant-cron.log 2>&1\n' > /etc/cron.d/forus-merchant-cron
+chmod 644 /etc/cron.d/forus-merchant-cron
 bash backup.sh

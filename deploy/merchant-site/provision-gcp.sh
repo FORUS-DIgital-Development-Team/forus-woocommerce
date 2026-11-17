@@ -63,7 +63,7 @@ gcloud compute firewall-rules create "$name-web" --project="$PROJECT_ID" --netwo
 gcloud compute firewall-rules create "$name-iap" --project="$PROJECT_ID" --network="$name" --allow=tcp:22 --source-ranges=35.235.240.0/20 --target-tags="$name"
 gcloud compute addresses create "$name" --project="$PROJECT_ID" --region="$region"
 ip=$(gcloud compute addresses describe "$name" --project="$PROJECT_ID" --region="$region" --format='value(address)')
-gcloud compute resource-policies create snapshot-schedule "$name-daily" --project="$PROJECT_ID" --region="$region" --daily-schedule --start-time=02:00 --max-retention-days=14 --on-source-disk-delete=keep-auto-snapshots
+gcloud compute resource-policies create snapshot-schedule "$name-daily" --project="$PROJECT_ID" --region="$region" --storage-location="$region" --daily-schedule --start-time=02:00 --max-retention-days=14 --on-source-disk-delete=keep-auto-snapshots
 gcloud compute instances create "$name" --project="$PROJECT_ID" --zone="$zone" --machine-type=e2-medium \
   --network-interface="subnet=$name,address=$ip" --tags="$name" \
   --image-family=ubuntu-2404-lts-amd64 --image-project=ubuntu-os-cloud \
