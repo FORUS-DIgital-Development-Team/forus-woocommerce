@@ -4,10 +4,10 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 umask 077
 [[ $EUID == 0 ]] || { echo 'Run as root on the dedicated Linux host.' >&2; exit 1; }
 : "${ADMIN_EMAIL:?Set ADMIN_EMAIL to the store administrator email}"
-SITE_URL=${SITE_URL:-https://merchant.forus.digital}
-SITE_ADDRESS=${SITE_ADDRESS:-merchant.forus.digital}
+SITE_URL=${SITE_URL:-https://shop.forus.digital}
+SITE_ADDRESS=${SITE_ADDRESS:-shop.forus.digital}
 if [[ ${FORUS_LOCAL_TEST:-0} != 1 ]]; then
-  [[ $SITE_URL == https://merchant.forus.digital && $SITE_ADDRESS == merchant.forus.digital ]] || exit 1
+  [[ $SITE_URL == https://shop.forus.digital && $SITE_ADDRESS == shop.forus.digital ]] || exit 1
 fi
 [[ $ADMIN_EMAIL =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]] || { echo 'Invalid administrator email.' >&2; exit 1; }
 command -v docker >/dev/null

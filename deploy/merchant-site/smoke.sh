@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-base=${1:-https://merchant.forus.digital}
+base=${1:-https://shop.forus.digital}
 for path in / /wp-login.php /shop/ /cart/ /checkout/; do
   code=$(curl --silent --show-error --location --retry 10 --retry-all-errors --retry-delay 2 --max-time 30 --output /dev/null --write-out '%{http_code}' "$base$path")
   [[ $code == 200 ]] || { echo "FAIL $path HTTP $code"; exit 1; }

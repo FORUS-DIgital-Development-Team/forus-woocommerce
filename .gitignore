@@ -4,3 +4,9 @@
 /.test-site/
 /.env
 /test-results/
+/deploy/merchant-site/.env
+/deploy/merchant-site/secrets/
+/deploy/merchant-site/state/
+/deploy/merchant-site/backups/
+/deploy/merchant-site/*images.env
+/deploy/merchant-site/installed-versions.txt

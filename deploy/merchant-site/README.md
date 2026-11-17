@@ -1,6 +1,14 @@
-# merchant.forus.digital installation
+# shop.forus.digital installation
 
-## Verified state - 17 November 2026
+## Deployment continuation — 17 November 2026
+
+The user selected **shop.forus.digital** for the demonstration store. Preserve both the existing `merchant.forus.digital` Manus assignment and the working Keycloak-protected ICBA portal at `https://merchant.icba.forus.coop/`. The former currently serves a Manus "Site Unavailable" page; that does not authorize replacing it. The ICBA service is separately deployed as `icba-merchant-production` in the production project.
+
+Authenticated GCP CLI, GitHub CLI/connector and Cloudflare browser access are now verified. Use the actual upstream branch history. The installer defaults and production hostname guard now select `shop.forus.digital`. The cloud script defaults to `DNS_PROVIDER=cloudflare`, verifies authoritative nameservers, and prepares the isolated host without changing DNS. After installation it prints the new DNS-only A record to create through authenticated Cloudflare management. It never overwrites an existing record or migrates the DNS zone. `DNS_PROVIDER=google` retains the guarded Cloud DNS path for an actually authoritative Cloud DNS zone.
+
+Target: `forus-prod-503017`, `africa-south1-a`, isolated `forus-merchant-demo` VM/network. Run `PROJECT_ID=forus-prod-503017 ADMIN_EMAIL=<operator-email> bash deploy/merchant-site/provision-gcp.sh` from Linux, or perform the same scoped commands with the authenticated local GCP CLI. Inspect existing resources before resuming a partial run. Deployment verification and payment acceptance are recorded separately; the historical CI evidence below is not proof of live deployment.
+
+## Historical installer validation - 17 November 2026
 
 Commit `cf92a7339cebd3ae79e6d1980719bd2eb382f453` passed the complete container installation/restart/backup-restore job in [run 44018352178](https://github.com/FORUS-DIgital-Development-Team/forus-woocommerce/actions/runs/44018352178). The eight plugin validation/packaging jobs also passed in [run 44018352170](https://github.com/FORUS-DIgital-Development-Team/forus-woocommerce/actions/runs/44018352170). This proves the installation package in a disposable runner, not an external deployment or live payments.
 
