@@ -1,5 +1,17 @@
 # merchant.forus.digital installation
 
+## Verified state - 17 November 2026
+
+Commit `cf92a7339cebd3ae79e6d1980719bd2eb382f453` passed the complete container installation/restart/backup-restore job in [run 44018352178](https://github.com/FORUS-DIgital-Development-Team/forus-woocommerce/actions/runs/44018352178). The eight plugin validation/packaging jobs also passed in [run 44018352170](https://github.com/FORUS-DIgital-Development-Team/forus-woocommerce/actions/runs/44018352170). This proves the installation package in a disposable runner, not an external deployment or live payments.
+
+Public DNS from that runner revealed an existing hostname assignment:
+
+- Authoritative nameservers: `april.ns.cloudflare.com` and `quentin.ns.cloudflare.com`.
+- `merchant.forus.digital` resolves through `forusconfig-7mhqfp4d.manus.space`.
+- The organization's `forus-merchant-config-platform` repository is a React/Express merchant configuration portal, not a WordPress installation. Its HTML title is FORUS Merchant Configuration Platform. Repository source alone does not verify the current live application version.
+
+**Preserve this existing DNS assignment and application.** Earlier claims that the hostname was unused were not supported by a successful DNS check. No DNS record or existing portal has been changed by this work. Decide how the WooCommerce demonstration store should coexist with the portal before any domain cutover. The GCP/Cloud DNS provisioning script deliberately refuses this current configuration before creating resources: Cloudflare is authoritative and the hostname already exists. It is a guarded preparation script, not a validated deployment path for this domain. Authenticated Cloudflare access and an agreed coexistence/cutover plan are still required.
+
 This installs a persistent **demonstration store**, separate from payment release approval. It does not create a live payment capability. The matching plugin source is included in the package, while all checkout gateways are disabled until the paired backend sandbox is provisioned. This avoids accepting real orders with incomplete payment processing.
 
 ## What is prepared
@@ -17,7 +29,7 @@ Use an authenticated Google Cloud Shell/administrator terminal with access to th
 
 The GCP script creates a dedicated `forus-merchant-demo` VPC/subnet, static IP, Ubuntu 24.04 e2-medium VM with a retained 50 GB disk, scoped web/IAP firewall rules and snapshot schedule. These are billable resources. The VM has no GCP service account. Administration uses OS Login and IAP; the signed-in operator must already have the necessary compute, OS Login, IAP and DNS permissions. The script does not grant IAM privileges.
 
-Hosting and DNS project IDs must be supplied explicitly. Existing FORUS source identifies `forus-prod-503017` and `forus-staging-503017`, but the authoritative DNS zone location has not been verified. The script checks DNS authority and refuses to overwrite any existing record or named infrastructure. If DNS is hosted elsewhere, stop and use that provider's authenticated management path rather than creating an ineffective Cloud DNS zone.
+Hosting and DNS project IDs must be supplied explicitly. Existing FORUS source identifies `forus-prod-503017` and `forus-staging-503017`; actual DNS is Cloudflare, as recorded above. The script checks DNS authority and refuses to overwrite any existing record or named infrastructure. For this domain, stop and use Cloudflare's authenticated management path rather than creating an ineffective Cloud DNS zone.
 
 From this committed branch in Cloud Shell, set `PROJECT_ID`, `DNS_PROJECT_ID` and `ADMIN_EMAIL`, then run:
 
