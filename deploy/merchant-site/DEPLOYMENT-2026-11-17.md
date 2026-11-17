@@ -1,5 +1,7 @@
 # FORUS demonstration deployment — 17 November 2026
 
+Follow-up GCP recovery audit: all 486 enabled October secret-backup versions, 18 non-Keycloak SQL export objects, 268 build tar archives and 70 Rail/Admin application images were inspected without recovering the Ecentric client key. A read-only check of the current production Admin database found no Ecentric tenant-rail, integration or network-rail records. The temporary audit job was removed. The 14 deployed safety/gate checks passed again; order 16 stays pending/unpaid, and all public/live/refund execution gates remain off. The Ecentric profile is still unchanged. The user explicitly chose to keep the prepared provider email unsent. See the Rail Connector's `docs/ecentric-gcp-recovery-audit-2026-11-17.md` for bounded search coverage and resumption requirements.
+
 ## Follow-up deployment: callbacks and refund recovery
 
 The current candidate is deployed with all execution gates still off. This section supersedes the initial revision/package and unimplemented-refund statements below.
