@@ -9,7 +9,9 @@ stamp=$(date -u +%Y%m%dT%H%M%SZ)
 dest="backups/$stamp"
 mkdir "$dest"
 dc exec -T db sh -c 'export MYSQL_PWD="$(cat /run/secrets/db_root_password)"; exec mariadb-dump --user=root --single-transaction --routines --events wordpress' | gzip > "$dest/database.sql.gz"
-tar -czf "$dest/site-files.tar.gz" state/wordpress .env images.env secrets
+configuration=(compose.yml Caddyfile .env images.env)
+if [[ -f compose.override.yml ]]; then configuration+=(compose.override.yml); fi
+tar -czf "$dest/site-files.tar.gz" state/wordpress "${configuration[@]}" secrets
 test -s "$dest/database.sql.gz"
 test -s "$dest/site-files.tar.gz"
 gzip -t "$dest/database.sql.gz" "$dest/site-files.tar.gz"

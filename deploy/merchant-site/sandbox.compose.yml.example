@@ -1,0 +1,21 @@
+# Explicit sandbox activation only after backend capabilities have been verified.
+# Install as compose.override.yml alongside compose.yml. Never use live keys.
+x-sandbox-config: &sandbox-config |
+  define('DISALLOW_FILE_EDIT', true);
+  define('WP_AUTO_UPDATE_CORE', 'minor');
+  define('FORUS_WC_ENABLE_TEST_CHECKOUT', true);
+  define('WP_ENVIRONMENT_TYPE', 'staging');
+  define('FORUS_WC_API_KEY', trim(file_get_contents('/run/secrets/forus_api_key')));
+  define('FORUS_WC_WEBHOOK_SECRET', trim(file_get_contents('/run/secrets/forus_webhook_secret')));
+services:
+  wordpress:
+    environment:
+      WORDPRESS_CONFIG_EXTRA: *sandbox-config
+    secrets: [forus_api_key, forus_webhook_secret]
+  cli:
+    environment:
+      WORDPRESS_CONFIG_EXTRA: *sandbox-config
+    secrets: [forus_api_key, forus_webhook_secret]
+secrets:
+  forus_api_key: {file: ./secrets/forus_api_key}
+  forus_webhook_secret: {file: ./secrets/forus_webhook_secret}

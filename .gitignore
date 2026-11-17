@@ -10,3 +10,4 @@
 /deploy/merchant-site/backups/
 /deploy/merchant-site/*images.env
 /deploy/merchant-site/installed-versions.txt
+/deploy/merchant-site/compose.override.yml
