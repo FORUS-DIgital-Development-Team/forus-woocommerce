@@ -1,0 +1,78 @@
+name: forus-merchant
+x-wp-environment: &wp-environment
+  WORDPRESS_DB_HOST: db:3306
+  WORDPRESS_DB_NAME: wordpress
+  WORDPRESS_DB_USER: wordpress
+  WORDPRESS_DB_PASSWORD_FILE: /run/secrets/db_password
+  WORDPRESS_CONFIG_EXTRA: |
+    define('DISALLOW_FILE_EDIT', true);
+    define('WP_AUTO_UPDATE_CORE', 'minor');
+    define('FORUS_WC_ENABLE_TEST_CHECKOUT', false);
+    define('WP_ENVIRONMENT_TYPE', 'staging');
+services:
+  db:
+    image: ${DB_IMAGE:-mariadb:11.4}
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD_FILE: /run/secrets/db_password
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+    secrets: [db_password, db_root_password]
+    volumes: [./state/database:/var/lib/mysql]
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+    networks: [database]
+    logging: &logging
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+  wordpress:
+    image: ${WP_IMAGE:-wordpress:php8.3-apache}
+    restart: unless-stopped
+    environment: *wp-environment
+    secrets: [db_password]
+    volumes: [./state/wordpress:/var/www/html]
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [web, database]
+    logging: *logging
+  cli:
+    image: ${CLI_IMAGE:-wordpress:cli-php8.3}
+    profiles: [tools]
+    user: '33:33'
+    environment:
+      <<: *wp-environment
+      SITE_URL: ${SITE_URL:-https://merchant.forus.digital}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL}
+    secrets: [db_password, admin_password]
+    volumes:
+      - ./state/wordpress:/var/www/html
+      - ../../dist:/package:ro
+      - ./configure.php:/configure.php:ro
+    networks: [web, database]
+    logging: *logging
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2}
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-merchant.forus.digital}
+    ports:
+      - '${BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-80}:80'
+      - '${BIND_ADDRESS:-0.0.0.0}:${HTTPS_PORT:-443}:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./state/caddy-data:/data
+      - ./state/caddy-config:/config
+    networks: [web]
+    logging: *logging
+networks:
+  web:
+  database:
+    internal: true
+secrets:
+  db_password: {file: ./secrets/db_password}
+  db_root_password: {file: ./secrets/db_root_password}
+  admin_password: {file: ./secrets/admin_password}

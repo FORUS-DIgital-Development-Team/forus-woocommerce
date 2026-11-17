@@ -1,0 +1,59 @@
+name: Validate merchant demonstration site
+on:
+  pull_request:
+    paths: ['deploy/merchant-site/**', '.github/workflows/merchant-site.yml']
+  push:
+    branches: ['feature/merchant-site-provisioning']
+permissions:
+  contents: read
+concurrency:
+  group: merchant-site-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate scripts and package
+        run: |
+          for script in deploy/merchant-site/*.sh; do bash -n "$script"; done
+          python3 deploy/merchant-site/package.py
+      - name: Install actual containerised WordPress and WooCommerce
+        run: |
+          sudo env ADMIN_EMAIL=demo@example.test FORUS_LOCAL_TEST=1 SITE_URL=http://localhost:8088 SITE_ADDRESS=http://:80 BIND_ADDRESS=127.0.0.1 HTTP_PORT=8088 HTTPS_PORT=8443 bash deploy/merchant-site/install.sh
+          bash deploy/merchant-site/smoke.sh http://localhost:8088
+      - name: Verify gateway isolation and persistent installation
+        working-directory: deploy/merchant-site
+        run: |
+          sudo docker compose --env-file .env --env-file images.env run --rm --no-deps cli eval 'if (get_option("woocommerce_currency") !== "ZAR" || get_option("woocommerce_forus_settings")["enabled"] !== "no" || FORUS_WC_ENABLE_TEST_CHECKOUT !== false || count(WC()->payment_gateways()->get_available_payment_gateways()) !== 0) { WP_CLI::error("Unexpected gateway configuration"); } WP_CLI::success("All financial execution disabled on new site");'
+          sudo docker compose --env-file .env --env-file images.env run --rm --no-deps cli plugin is-active forus-woocommerce
+          sudo docker compose --env-file .env --env-file images.env run --rm --no-deps cli eval 'if (!Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled()) { WP_CLI::error("HPOS disabled"); }'
+          sudo cp secrets/admin_password /tmp/forus-admin-before
+          sudo env ADMIN_EMAIL=demo@example.test FORUS_LOCAL_TEST=1 SITE_URL=http://localhost:8088 SITE_ADDRESS=http://:80 BIND_ADDRESS=127.0.0.1 HTTP_PORT=8088 HTTPS_PORT=8443 bash install.sh
+          sudo cmp --silent /tmp/forus-admin-before secrets/admin_password
+          sudo docker compose --env-file .env --env-file images.env run --rm --no-deps cli eval 'if (count(wc_get_products(array("sku" => "FORUS-DEMO-001"))) !== 1) { WP_CLI::error("Duplicate demo products"); }'
+          sudo docker compose --env-file .env --env-file images.env restart wordpress
+          sleep 5
+          bash smoke.sh http://localhost:8088
+      - name: Verify backup and restore to disposable database
+        working-directory: deploy/merchant-site
+        run: |
+          sudo bash backup.sh
+          sudo env FORUS_LOCAL_TEST=1 bash test-restore.sh
+      - name: Capture non-secret validation evidence
+        if: always()
+        run: |
+          mkdir -p test-results
+          sudo cp deploy/merchant-site/installed-versions.txt test-results/ || true
+          sudo cp deploy/merchant-site/installed-images.env test-results/ || true
+          sudo chown -R "$USER" test-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: merchant-site-validation
+          path: test-results/
+      - name: Stop disposable test services
+        if: always()
+        working-directory: deploy/merchant-site
+        run: sudo docker compose --env-file .env --env-file images.env down

@@ -1,0 +1,8 @@
+.env
+images.env
+state/
+secrets/
+backups/
+*.tar.gz
+installed-versions.txt
+installed-images.env
