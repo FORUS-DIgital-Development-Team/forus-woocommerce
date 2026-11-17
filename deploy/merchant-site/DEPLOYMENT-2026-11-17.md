@@ -1,5 +1,23 @@
 # FORUS demonstration deployment — 17 November 2026
 
+## Follow-up deployment: callbacks and refund recovery
+
+The current candidate is deployed with all execution gates still off. This section supersedes the initial revision/package and unimplemented-refund statements below.
+
+- Plugin source `2a86971dcc64710c12a8eff9288681bbebb1317b`; exact GitHub Actions ZIP SHA256 `5a15012ebdc1793c93b93882c86a832b377786cf2388ab18fc44e34eebad3112`, verified again on the host before installation. Plugin remains 1.1.0-dev. `/opt/forus-merchant/deployed-plugin-source.txt` records this SHA; the site's provisioned source record remains unchanged.
+- Backend source `265180b4eb48b77d72460ed987c26542013b450c`; image digest `sha256:8289008b847ff085131286ad9070838e996b6e94918a743f73705acabc10d9be`; current revision `forus-merchant-sandbox-00005-qgb`. Cloud Build `cc6f4391-e0cf-4b2f-940c-3cabd1007d45` succeeded.
+- Additive migration 0012 completed in execution `forus-merchant-migrate-staging-vkcpv`, with 13 migration hashes verified. Cloud SQL backup `1794901733731` completed successfully before migration. Host backups `20261117T075606Z` and `20261117T075634Z` bracket the plugin upgrade.
+- Signed cancellation/timeout failures can have a blank TransactionID; these remain failures and are stored with NULL transaction IDs. Success still requires an ID and exact signed binding.
+- New sandbox-only mTLS SOAP/RTTQ transport verifies certificate identity, validity and matching private key. It uses the existing registered PFX or PEM and rejects production destinations. No replacement provider certificate was generated.
+- Durable refund reservations enforce idempotency and cumulative limits. Uncertain refunds never repeat the provider POST. WooCommerce can recover by caller key and record a confirmed asynchronous refund locally without sending another refund.
+- Backend full typecheck/test CI `44041347324` and focused merchant CI `44041347473` passed. The focused suite has 41 tests. Plugin CI `44041370399` passed all eight jobs: 103 engine assertions and 25 merchant-adapter assertions on PHP 8.1–8.5, real WooCommerce HPOS on/off accounting/recovery and package verification. Site installer CI `44041370382` passed.
+- Deployed checks passed: duplicate create reuse, changed amount 409, auth enforcement, forged callback and duplicate fields rejected, uncertain order remains unpaid, unauthenticated refund POST 401, authenticated disabled refund POST 503, lookup 404 proving no refund reservation was created. Backend health/readiness and OIDC delivery remain healthy.
+- Final configuration readback: environment=test, `MERCHANT_CHECKOUT_PROVIDER_API_ENABLED=false`, `MERCHANT_CHECKOUT_REFUNDS_ENABLED=false`, capabilities live=false/refunds=false. Store enabled=no; `FORUS_WC_ENABLE_TEST_REFUNDS` is unset/false. No live payment or provider refund occurred.
+
+The user confirmed that all services have been ported; old Manus/Vercel host notes are historical, not current hosting instructions. Current dev/staging/prod service configurations, 243 retained revisions across the principal Rail/Admin services, and the October GCP backup's secret/runtime inventories contain no Ecentric client-certificate binding. The migration archive buckets and their October inventories are empty. The existing certificate's private key has not been located in the migrated GCP estate; this remains an unresolved migration/configuration dependency, not a request to return to the old hosting platform.
+
+Ecentric's sandbox profile still uses the stale WOW callback URL. Real provider success/decline/cancel, missed-callback recovery, partial/full refunds and settlement reconciliation therefore remain outstanding. Keep the retained order 16 pending; do not repeat its uncertain charge. The callback profile and existing certificate must be restored/verified before running that acceptance matrix.
+
 Public store: https://shop.forus.digital/
 
 Administrator: https://shop.forus.digital/wp-admin/ — username `forus-admin`. The generated password remains root-only on the host at `secrets/admin_password`; retrieve through authenticated IAP/OS Login. Do not put it in chat or repository files.
