@@ -6,7 +6,8 @@ for path in / /wp-login.php /shop/ /cart/ /checkout/; do
   [[ $code == 200 ]] || { echo "FAIL $path HTTP $code"; exit 1; }
   echo "PASS $path"
 done
-curl --fail --silent --show-error --max-time 30 "$base/" | grep -q 'Explore FORUS checkout'
+body=$(curl --fail --silent --show-error --max-time 30 "$base/")
+grep -q 'Explore FORUS checkout' <<< "$body"
 for path in /wp-config.php /.env /.git/config /xmlrpc.php; do
   code=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' "$base$path")
   [[ $code == 404 ]] || { echo "FAIL protected path $path HTTP $code"; exit 1; }

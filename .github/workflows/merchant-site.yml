@@ -45,6 +45,9 @@ jobs:
           mkdir -p test-results
           sudo cp deploy/merchant-site/installed-versions.txt test-results/ || true
           sudo cp deploy/merchant-site/installed-images.env test-results/ || true
+          dig +short NS forus.digital > test-results/domain-nameservers.txt
+          dig +short A merchant.forus.digital > test-results/merchant-dns.txt
+          cat test-results/domain-nameservers.txt test-results/merchant-dns.txt
           sudo chown -R "$USER" test-results
       - uses: actions/upload-artifact@v4
         if: always()
