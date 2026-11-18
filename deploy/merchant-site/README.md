@@ -1,5 +1,9 @@
 # shop.forus.digital installation
 
+## Current storefront — 18 November 2026
+
+The shop now has a FORUS merchandise collection, responsive storefront and explicitly simulated eZAR/WOW checkouts. Both demo journeys were verified in the browser; no money moves and orders remain unpaid. The real FORUS/Ecentric gateway and provider/refund flags remain disabled. See [the merchandise deployment record](merch-demo/DEPLOYMENT-2026-11-18.md) and [its installation and recovery guide](merch-demo/README.md). The earlier paused single-product shop is described below for history.
+
 ## Deployment continuation — 17 November 2026
 
 **Deployed at https://shop.forus.digital/**. Read [the current deployment and acceptance record](DEPLOYMENT-2026-11-17.md) first. Store/admin access, TLS, backups, off-host restore and sandbox API connectivity are verified. An actual 3DS test exposed a stale provider redirect; new checkout is paused and the pending order is preserved. Provider acceptance and live/refund implementation remain incomplete.
