@@ -17,3 +17,4 @@ jobs:
           for file in deploy/merchant-site/ezar-acceptance/*.php; do php -l "$file"; done
           bash -n deploy/merchant-site/ezar-acceptance/install-staged.sh
           php deploy/merchant-site/ezar-acceptance/test-openpay.php
+          php deploy/merchant-site/ezar-acceptance/test-invoice-attempt.php

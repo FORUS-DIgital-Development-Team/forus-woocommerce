@@ -6,6 +6,7 @@
  */
 defined('ABSPATH') || exit;
 require_once __DIR__ . '/openpay-client.php';
+require_once __DIR__ . '/invoice-attempt.php';
 
 add_action('before_woocommerce_init', function () {
     if (class_exists('\\Automattic\\WooCommerce\\Utilities\\FeaturesUtil')) {

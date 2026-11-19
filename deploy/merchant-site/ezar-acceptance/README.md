@@ -38,7 +38,11 @@ not used to create a replacement for the merchant's existing eZAR wallet.
   gateway ID `forus_ezar_openpay`.
 - Explicitly sandbox-only signed invoice creation and invoice reads, with a fixed
   receiving account/token, exact decimal validation and shop-owned references.
-- No automatic creation retry after an uncertain response.
+- Permanent atomic reservation per WooCommerce order before provider I/O. The
+  reservation binds sandbox environment, receiving account, token, currency and
+  amount. Concurrent requests, timeouts, process restarts and failed result writes
+  cannot issue a second invoice. Only the dedicated gateway's unpaid orders on
+  the exact staging shop are eligible. This internal service has no public route.
 - Evidence checks for invoice, destination, token, description and amount. They
   never mark an order paid: final provider status/settlement semantics are not yet
   verified. No unverified callback endpoint is exposed.
@@ -49,12 +53,13 @@ not used to create a replacement for the merchant's existing eZAR wallet.
 
 1. Verify the existing wallet's merchant/Open Pay eligibility with the provider;
    personal wallet classification alone is not evidence of merchant approval.
-2. Obtain authorised sandbox credential access. GCP explicitly rejects secret
-   access because of an **IAM deny policy**; running the existing staging identity
-   also failed `iam.serviceaccounts.actAs`. A ten-minute conditional grant to the
-   existing project owner did not override the deny. All three task-owned secret
-   grants were removed and their removal verified. The deny policy was not changed
-   or bypassed, and no persistent access was added.
+2. Issue a dedicated restricted shop sandbox credential. The existing WOW GCP
+   secrets are deliberately isolated by an IAM deny policy and must not be reused
+   by another application. All temporary task-owned allow grants were removed
+   and their removal verified; the deny policy was preserved. A shop-specific
+   sandbox key is prepared in CloudGate, pending the required credential-creation
+   confirmation. It permits account/token reads and receiving Open Pay invoice
+   create/read/frame only, with request limits; it cannot debit or withdraw.
 3. Verify sandbox invoice response, hosted URL, invoice idempotency/reconciliation,
    exact status and settlement evidence, callback authentication, expiry, failures,
    wrong amounts, duplicate callbacks and missed callbacks.
@@ -67,6 +72,12 @@ not used to create a replacement for the merchant's existing eZAR wallet.
 ## Validation and staging
 
 `php test-openpay.php` runs network-free adversarial contract-safety checks.
+`php test-invoice-attempt.php` exercises overlapping requests, lost responses,
+failed writes, changed destinations/amounts and rejection of demo orders.
+`wp eval-file verify-invoice-attempt.php` checks a disposable unpaid HPOS order
+against two real database connections, including a conflicting insert, using
+synthetic transport only. Its `finally` block removes only that test's order and
+reservation. It never resets a real invoice attempt or calls the provider.
 `install-staged.sh /absolute/binding/directory` checks the exact shop/staging target,
 backs up the site, installs the two runtime files, records the supplied verified
 `merchant.json`, and runs `verify-staged.php`. The latter checks that the new
