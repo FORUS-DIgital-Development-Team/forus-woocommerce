@@ -49,17 +49,45 @@ not used to create a replacement for the merchant's existing eZAR wallet.
 - No private provider keys deployed to WordPress; existing simulated eZAR and WOW
   checkouts and historical unpaid orders are preserved.
 
+## Sandbox provider evidence (19 November 2026)
+
+The dedicated shop key was approved, created and restricted to sandbox account,
+token and receiving Open Pay endpoints, with request limits. Production access,
+payer debits, sends, withdrawals and refunds are excluded. It is encrypted outside
+Git, with a verified dedicated Secret Manager version in the staging GCP project
+replicated in `africa-south1`. No secret IAM grants or runtime changes were made;
+it is not deployed to WordPress. The key has endpoint restrictions; the
+server must still bind the intended receiving account.
+
+Authenticated account and token reads passed with this key. The existing FORUS
+organizational sandbox wallet was located in the provider's KYB correspondence and
+matched by account, owner profile and address. That wallet is a test fixture only;
+the shop's intended production destination remains the merchant's original wallet.
+Neither that match nor the provider's personal-wallet category proves merchant
+eligibility or completed KYB.
+
+One standalone, unpaid sandbox invoice request was submitted at 12:43:15 UTC with
+reference `FORUS-shop-acceptance-20261119-01`. CloudGate session `27879054` records
+upstream HTTP **302 Found**, `IsError: true`, and `Result: null`. No invoice ID or
+hosted URL was returned. A later read of an all-zero nonexistent invoice ID also
+returned 302, no `Location` header, and the non-JSON body `Found Found - ` despite
+an `application/json` content type. This is not a verified hosted checkout.
+
+The creation was not repeated. Its durable journal is retained for provider
+reconciliation because an error response does not prove no invoice was created.
+No payment, callback or provider refund has passed. Regression tests reproduce
+the 302 response and verify that another worker cannot submit a second invoice.
+The exact incident and required provider changes are prepared in an unsent local
+brief; provider workflow credentials and shared WOW secrets were not changed.
+
 ## Remaining release gates
 
 1. Verify the existing wallet's merchant/Open Pay eligibility with the provider;
    personal wallet classification alone is not evidence of merchant approval.
-2. Issue a dedicated restricted shop sandbox credential. The existing WOW GCP
-   secrets are deliberately isolated by an IAM deny policy and must not be reused
-   by another application. All temporary task-owned allow grants were removed
-   and their removal verified; the deny policy was preserved. A shop-specific
-   sandbox key is prepared in CloudGate, pending the required credential-creation
-   confirmation. It permits account/token reads and receiving Open Pay invoice
-   create/read/frame only, with request limits; it cannot debit or withdraw.
+2. Resolve the provider's sandbox Open Pay 302 failure and reconcile the single
+   existing invoice attempt before another creation. The dedicated credential's
+   account/token reads pass; a broader credential is not justified by this error.
+   Existing WOW application secrets remain isolated and must not be reused.
 3. Verify sandbox invoice response, hosted URL, invoice idempotency/reconciliation,
    exact status and settlement evidence, callback authentication, expiry, failures,
    wrong amounts, duplicate callbacks and missed callbacks.
@@ -79,7 +107,7 @@ against two real database connections, including a conflicting insert, using
 synthetic transport only. Its `finally` block removes only that test's order and
 reservation. It never resets a real invoice attempt or calls the provider.
 `install-staged.sh /absolute/binding/directory` checks the exact shop/staging target,
-backs up the site, installs the two runtime files, records the supplied verified
+backs up the site, installs the runtime files, records the supplied verified
 `merchant.json`, and runs `verify-staged.php`. The latter checks that the new
 gateway and refunds remain locked, the FORUS gateway remains disabled, only the
 two original simulated gateways are publicly available, all six products remain,

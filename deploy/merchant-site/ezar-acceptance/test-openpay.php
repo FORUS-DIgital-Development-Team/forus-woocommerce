@@ -38,4 +38,16 @@ rejects(function()use($timeout){$timeout->create_invoice('1','FORUS-timeout');},
 $failed=new FORUS_Ezar_OpenPay_Client($config,function(){return array('response'=>array('code'=>200),'body'=>'{"success":false,"result":{"status":"paid"}}');});
 rejects(function()use($failed){$failed->read_invoice('33333333-3333-3333-3333-333333333333');},'Provider error inside HTTP 200 refused');
 rejects(function()use($client){$client->read_invoice('../send');},'Path injection refused');
+// Actual sandbox failure on 2026-11-19: HTTP 302, application/json, "Found Found - ".
+// Even a JSON-looking redirect response must not be accepted as an invoice.
+foreach(array('Found Found - ', '{"success":true,"result":{"id":"33333333-3333-3333-3333-333333333333","status":"paid"}}') as $redirect_body) {
+    $redirect_calls=0;
+    $redirect=new FORUS_Ezar_OpenPay_Client($config,function()use(&$redirect_calls,$redirect_body){
+        $redirect_calls++;
+        return array('response'=>array('code'=>302),'headers'=>array('location'=>'https://example.com/checkout'),'body'=>$redirect_body);
+    });
+    rejects(function()use($redirect){$redirect->create_invoice('1','FORUS-redirect');},'Redirect is not an accepted invoice');
+    rejects(function()use($redirect){$redirect->read_invoice('33333333-3333-3333-3333-333333333333');},'Redirect is not settlement evidence');
+    check($redirect_calls===2,'Redirect responses are never followed or retried');
+}
 echo "PASS: $passed Open Pay contract-safety checks; no provider calls.\n";

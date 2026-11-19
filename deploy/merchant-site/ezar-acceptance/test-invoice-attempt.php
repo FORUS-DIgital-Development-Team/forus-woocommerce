@@ -81,6 +81,20 @@ $wpdb->before_insert = function() use ($race) { $race->create(7); };
 check($race->create(7)['state'] === 'response_received' && $race_calls === 1, 'Competing worker between initial read and insert wins without a duplicate POST');
 $wpdb->last_error = 'database unavailable';
 rejects(function() use ($race) { $race->create(8); }, 'Read failure cannot be mistaken for missing reservation'); $wpdb->last_error = '';
+$redirect_calls = 0;
+$redirect_transport = function() use (&$redirect_calls) {
+    $redirect_calls++;
+    return array('response' => array('code' => 302), 'body' => 'Found Found - ');
+};
+$redirect = new FORUS_Ezar_Invoice_Attempt($config, $redirect_transport);
+rejects(function() use ($redirect) { $redirect->create(9); }, 'Actual provider redirect failure requires reconciliation');
+// A fresh worker must see the permanent reservation after the provider returned 302.
+$next_worker = new FORUS_Ezar_Invoice_Attempt($config, $redirect_transport);
+$redirect_attempt = $next_worker->create(9);
+check($redirect_attempt['state'] === 'outcome_unknown' && $redirect_attempt['invoice_id'] === null && $redirect_calls === 1,
+    'Provider redirect survives worker restart without a second invoice request');
+check(!$order->paid && strpos(json_encode($options['forus_ezar_attempt_9']), 'Found Found') === false,
+    'Provider redirect cannot settle an order or persist its raw response');
 foreach (array('forus_demo_ezar', 'forus_demo_wow', 'forus') as $method) {
     $order->method = $method; rejects(function() use ($service) { $service->create(6); }, 'Other gateways and demo orders rejected');
 }
