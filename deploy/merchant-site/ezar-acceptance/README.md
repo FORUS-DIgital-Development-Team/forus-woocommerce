@@ -49,9 +49,12 @@ not used to create a replacement for the merchant's existing eZAR wallet.
 
 1. Verify the existing wallet's merchant/Open Pay eligibility with the provider;
    personal wallet classification alone is not evidence of merchant approval.
-2. Obtain authorised sandbox credential access. Current GCP access returned 403
-   for `wow-api-key-staging`; running the existing staging identity also failed
-   `iam.serviceaccounts.actAs`. No IAM grants were broadened.
+2. Obtain authorised sandbox credential access. GCP explicitly rejects secret
+   access because of an **IAM deny policy**; running the existing staging identity
+   also failed `iam.serviceaccounts.actAs`. A ten-minute conditional grant to the
+   existing project owner did not override the deny. All three task-owned secret
+   grants were removed and their removal verified. The deny policy was not changed
+   or bypassed, and no persistent access was added.
 3. Verify sandbox invoice response, hosted URL, invoice idempotency/reconciliation,
    exact status and settlement evidence, callback authentication, expiry, failures,
    wrong amounts, duplicate callbacks and missed callbacks.
