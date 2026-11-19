@@ -8,7 +8,7 @@ class WP_Error {
 	public function get_error_message() { return $this->message; }
 }
 function is_wp_error( $value ) { return $value instanceof WP_Error; }
-function wp_generate_uuid4() { static $n = 0; return 'test-operation-' . ++$n; }
+function wp_generate_uuid4() { static $n = 0; return sprintf( '00000000-0000-4000-8000-%012d', ++$n ); }
 function wp_json_encode( $value ) { return json_encode( $value ); }
 function wp_salt( $scheme ) { return 'unit-test-only-not-a-real-secret'; }
 function home_url( $path ) { return 'https://shop.example.test' . $path; }
@@ -16,7 +16,15 @@ function sanitize_text_field( $text ) { return strip_tags( $text ); }
 function wc_get_order( $id ) { return $GLOBALS['orders'][$id] ?? false; }
 function wp_safe_remote_request( $url, $args ) {
 	$GLOBALS['http_calls'][] = array( $url, $args );
-	return $GLOBALS['http_result'];
+	return is_callable( $GLOBALS['http_result'] ) ? $GLOBALS['http_result']( $url, $args ) : $GLOBALS['http_result'];
+}
+function wc_create_refund( $args ) {
+	check( false === $args['refund_payment'], 'Recovery never repeats a remote refund' );
+	$order = wc_get_order( $args['order_id'] );
+	$order->refunded = (string) ( (float) $order->refunded + $args['amount'] );
+	$order->remaining = (string) ( (float) $order->total - (float) $order->refunded );
+	$GLOBALS['local_refund_calls'] = ( $GLOBALS['local_refund_calls'] ?? 0 ) + 1;
+	return new TestOrder();
 }
 function wp_remote_retrieve_response_code( $response ) { return $response['response']['code']; }
 function wp_remote_retrieve_body( $response ) { return $response['body']; }

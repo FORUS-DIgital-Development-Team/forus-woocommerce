@@ -1,3 +1,13 @@
+## Sandbox refund candidate — 17 November 2026
+
+The persistent demo is deployed at https://shop.forus.digital, with its gateway paused after Ecentric returned the browser to an old WOW URL. Live payment support remains unconditionally disabled. The current candidate adds a real sandbox refund transport behind the separate `FORUS_WC_ENABLE_TEST_REFUNDS` opt-in and matching authenticated backend capability. Neither refund enablement nor provider acceptance is claimed.
+
+The backend now implements durable refund reservations, cumulative limits, immutable caller keys, exact SOAP/RTTQ binding and mandatory mTLS using the existing registered certificate. WooCommerce persists the refund lookup key before POST, then uses GET after an uncertain result. A confirmed asynchronous refund is recorded locally with `refund_payment=false`, under the order lock, without repeating the provider request. If intervening manual accounting makes attribution ambiguous, recovery stops for review. Synchronous confirmed refunds remain accounted by WooCommerce's normal caller. A crash after local creation but before its final checkpoint is handled conservatively and can require manual review.
+
+The registered PFX/private key has not been recovered from the old Rail Connector cloud computer, and Ecentric's sandbox response profile still targets the old WOW site. These prevent genuine end-to-end payment/refund and settlement acceptance. Tests with synthetic evidence, mocked HTTP, a local mTLS server and disposable WooCommerce orders do not satisfy that gate. The new code stays disabled on the public shop until those tests pass.
+
+The historical sections below describe earlier revisions; their claims that refunds, status queries or lookup-by-key are unimplemented are superseded by this section. Current deployment and CI evidence is recorded in `deploy/merchant-site/DEPLOYMENT-2026-11-17.md`.
+
 ## Merchant checkout integration — 15 November 2026
 
 This revision connects the consolidated plugin architecture to **Rail Connector PR #90** and its `forus-merchant-checkout-v1` contract. It replaces the previous fully blocked HTTP adapter for explicitly opted-in sandbox installations only. Existing lifecycle/refund safeguards and tests are retained.

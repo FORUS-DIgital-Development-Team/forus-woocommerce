@@ -119,7 +119,7 @@ $api->refunded['amount'] = 2500;
 check( is_wp_error( $service->refund( 42, '25.00', '' ) ) && 'pending' === $order->get_meta( '_forus_refund_operation' )['state'], 'Accepted refund is not reported as settled' );
 $api->refunded['status'] = 'completed';
 check( true === $service->reconcile_refund( 42 ) && 'completed' === $order->get_meta( '_forus_refund_operation' )['state'], 'Pending refund status tracked with authenticated evidence' );
-check( is_wp_error( $service->refund( 42, '25.00', '' ) ) && 1 === $api->refunds, 'Async refund requires local accounting reconciliation' );
+check( '25' === $order->refunded && true === $service->reconcile_refund( 42 ) && 1 === $api->refunds, 'Async refund is accounted once without another remote operation' );
 
 foreach ( array( 'failed', 'unknown', '', null ) as $status ) {
 	list( $order, $api, $store, $service ) = fixture();

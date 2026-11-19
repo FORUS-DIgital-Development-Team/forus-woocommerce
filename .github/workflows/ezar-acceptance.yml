@@ -1,0 +1,20 @@
+name: Validate staged eZAR acceptance
+on:
+  push:
+    paths: ['deploy/merchant-site/ezar-acceptance/**', '.github/workflows/ezar-acceptance.yml']
+  pull_request:
+    paths: ['deploy/merchant-site/ezar-acceptance/**', '.github/workflows/ezar-acceptance.yml']
+permissions:
+  contents: read
+jobs:
+  contract-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check restricted receiving integration
+        run: |
+          for file in deploy/merchant-site/ezar-acceptance/*.php; do php -l "$file"; done
+          bash -n deploy/merchant-site/ezar-acceptance/install-staged.sh
+          php deploy/merchant-site/ezar-acceptance/test-openpay.php
+          php deploy/merchant-site/ezar-acceptance/test-invoice-attempt.php

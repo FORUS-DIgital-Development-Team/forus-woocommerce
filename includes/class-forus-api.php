@@ -1,5 +1,5 @@
 <?php
-/** Sandbox merchant-checkout-v1 transport. Live payments and refunds remain disabled. */
+/** Sandbox merchant-checkout-v1 transport. Live payments remain disabled. */
 defined( 'ABSPATH' ) || exit;
 
 interface FORUS_Adapter {
@@ -29,7 +29,11 @@ class FORUS_API implements FORUS_Adapter {
 		return $this->ready();
 	}
 	public function supports_refunds(): bool {
-		return false;
+		if ( ! defined( 'FORUS_WC_ENABLE_TEST_REFUNDS' ) || true !== FORUS_WC_ENABLE_TEST_REFUNDS || ! $this->ready() ) {
+			return false;
+		}
+		$capabilities = $this->capabilities();
+		return ! is_wp_error( $capabilities ) && true === ( $capabilities['refunds'] ?? false );
 	}
 	public function create( array $request, string $key ) {
 		if ( ! $this->ready() ) {
@@ -84,10 +88,29 @@ class FORUS_API implements FORUS_Adapter {
 		return ! is_wp_error( $evidence ) && $session === $evidence['session'] ? $evidence : $this->blocked();
 	}
 	public function refund( string $session, int $amount, string $reason, string $key ) {
-		return $this->blocked();
+		if ( ! $this->supports_refunds() || ! $this->uuid( $session ) || ! $this->uuid( $key ) || $amount < 1 || $amount > 100000000 ) {
+			return $this->blocked();
+		}
+		return $this->normalize_refund( $this->request( '/payments/merchant-sessions/' . rawurlencode( $session ) . '/refunds',
+			array( 'requestKey' => $key, 'amountMinor' => $amount, 'reason' => $reason ) ), $session, $key, $amount );
 	}
 	public function refund_status( string $session, string $refund ) {
-		return $this->blocked();
+		// Read-only recovery still works when creation has been disabled.
+		if ( ! $this->ready() || ! $this->uuid( $session ) || ! $this->uuid( $refund ) ) {
+			return $this->blocked();
+		}
+		return $this->normalize_refund( $this->request( '/payments/merchant-sessions/' . rawurlencode( $session ) . '/refunds/' . rawurlencode( $refund ) ), $session, $refund );
+	}
+	private function uuid( string $value ): bool {
+		return 1 === preg_match( '/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/D', $value );
+	}
+	private function normalize_refund( $data, string $session, string $key, ?int $amount = null ) {
+		$evidence = $this->normalize( $data );
+		if ( is_wp_error( $evidence ) || $session !== $evidence['session'] || $key !== ( $data['refund'] ?? null )
+			|| ( null !== $amount && $amount !== $evidence['amount'] ) ) {
+			return $this->blocked();
+		}
+		return $evidence + array( 'refund' => $key );
 	}
 	public function capabilities() {
 		if ( ! $this->ready() ) {
@@ -96,7 +119,7 @@ class FORUS_API implements FORUS_Adapter {
 		$data = $this->request( '/payments/merchant-capabilities' );
 		if ( is_wp_error( $data ) || 'test' !== ( $data['environment'] ?? null )
 			|| $this->config['merchant'] !== ( $data['merchant_id'] ?? null ) || 'ZAR' !== ( $data['currency'] ?? null )
-			|| true !== ( $data['status'] ?? null ) || false !== ( $data['live'] ?? null ) || false !== ( $data['refunds'] ?? null ) ) {
+			|| true !== ( $data['status'] ?? null ) || false !== ( $data['live'] ?? null ) || ! is_bool( $data['refunds'] ?? null ) ) {
 			return $this->blocked();
 		}
 		return $data;
@@ -110,7 +133,11 @@ class FORUS_API implements FORUS_Adapter {
 			|| ! in_array( $data['status'] ?? '', array( 'pending', 'completed', 'failed' ), true ) ) {
 			return $this->blocked();
 		}
-		return array( 'session' => $data['id'], 'merchant' => $data['merchant_id'], 'reference' => $data['reference'],
+		$transaction = $data['provider_transaction_id'] ?? null;
+		if ( null !== $transaction && ( ! is_string( $transaction ) || ! preg_match( '/^[A-Za-z0-9_.:-]{1,128}$/D', $transaction ) ) ) {
+			return $this->blocked();
+		}
+		return array( 'session' => $data['id'], 'merchant' => $data['merchant_id'], 'reference' => $data['reference'], 'provider_transaction_id' => $transaction,
 			'environment' => 'sandbox', 'currency' => $data['currency'], 'amount' => $data['amount'], 'status' => $data['status'] );
 	}
 	private function request( string $path, ?array $body = null ) {

@@ -1,0 +1,24 @@
+FORUS demo merchandise — generated 18 November 2026
+Tool: built-in image_gen.imagegen (not CLI/API fallback).
+Final workspace assets: images/tee.jpg, hoodie.jpg, mug.jpg, cap.jpg, tote.jpg, bottle.jpg.
+The original generated PNGs were converted to JPEG at quality 88, without cropping or compositing.
+
+TEE / HOODIE / MUG
+Common prompt:
+Use case: product-mockup. Generate a photorealistic square ecommerce product photograph for the FORUS demonstration merchandise shop. Subject: [subject below] One item only, centered, fully visible with generous 15% margins. Warm off-white seamless studio backdrop (#f4f1eb), soft daylight from upper left, delicate grounded shadows, editorial premium quality and realistic materials. No people, no extra props, no surrounding labels, no price, no watermark. Exact printed text: FORUS. Match a sophisticated clean South African lifestyle brand, restrained navy and orange.
+
+tee: A premium white short-sleeve crewneck FORUS T-shirt, laid flat with natural cotton folds, a navy uppercase 'FORUS' wordmark centered on chest with FOR thin weight and US bold, a small orange square underneath.
+hoodie: A premium deep navy FORUS pullover hoodie with drawstrings and kangaroo pocket, laid flat with natural fleece folds, a white uppercase 'FORUS' wordmark centered on chest with FOR thin weight and US bold, a small orange square underneath.
+mug: A premium white ceramic FORUS coffee mug with a deep navy interior, large comfortable handle at right, three-quarter front view, a navy uppercase 'FORUS' wordmark printed on front with FOR thin weight and US bold, a small orange square underneath.
+
+CAP
+Use case: product-mockup. A photorealistic square ecommerce product photograph of one premium deep navy cotton six-panel FORUS baseball cap, adjustable strap, curved brim, three-quarter front view. White uppercase FORUS embroidery centered on the front, with FOR in thin weight and US in bold, tiny orange square below. Fully visible with generous 15% margins. Warm off-white seamless studio backdrop (#f4f1eb), soft daylight from upper left, subtle grounded shadow, realistic cotton texture, premium editorial look. No people, props, price, additional text or watermark. Exact text FORUS.
+
+TOTE / BOTTLE
+Common prompt:
+Use case: product-mockup. Photorealistic square ecommerce product photograph for the FORUS demonstration merchandise shop. [subject below] Fully visible, centered with generous 15% margins. Warm off-white seamless studio backdrop (#f4f1eb), soft daylight from upper left, subtle grounded shadows, editorial quality, realistic materials. No people, extra props, surrounding labels, prices or watermark. Exact printed text FORUS.
+
+tote: One premium natural cream canvas FORUS tote bag with long matching handles, laid flat with soft natural folds, a deep navy uppercase FORUS print centered on the front with FOR thin weight and US bold, small orange square below.
+bottle: One premium matte navy metal FORUS reusable water bottle, straight cylindrical body, screw lid with subtle carry loop, upright three-quarter front view, white uppercase FORUS wordmark across the front with FOR thin weight and US bold, small orange square below.
+
+All assets generated with transparent_background=false. No reference images supplied. Product concept imagery is labelled as such in the shop.

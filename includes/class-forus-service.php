@@ -136,6 +136,10 @@ final class FORUS_Service {
 			return $this->error( 'contract_unverified' );
 		}
 		$order = wc_get_order( $id );
+		$refund = $order ? $order->get_meta( '_forus_refund_operation' ) : null;
+		if ( is_array( $refund ) && 'reconcile' === ( $refund['local_handling'] ?? '' ) ) {
+			return $this->reconcile_refund( $id );
+		}
 		if ( $order && ! $order->get_meta( '_forus_payment_session_id' ) && is_array( $order->get_meta( '_forus_create_operation' ) )
 			&& method_exists( $this->api, 'can_retry_create' ) && $this->api->can_retry_create() ) {
 			return $this->create( $id );
@@ -149,12 +153,12 @@ final class FORUS_Service {
 		} );
 	}
 
-	/** Read-only refund tracking; never creates a second remote refund or a local refund. */
+	/** Provider recovery uses GET only. Local accounting never sends another remote refund. */
 	public function reconcile_refund( int $id ) {
 		if ( ! $this->api->ready() ) {
 			return $this->error( 'contract_unverified' );
 		}
-		return $this->store->locked( $id, function ( $order ) {
+		return $this->store->locked( $id, function ( $order ) use ( $id ) {
 			$snapshot = $order->get_meta( '_forus_snapshot' );
 			$operation = $order->get_meta( '_forus_refund_operation' );
 			if ( ! is_array( $snapshot ) || ! is_array( $operation ) || empty( $operation['refund'] ) || ! $this->current_snapshot_matches( $order, $snapshot ) ) {
@@ -164,6 +168,7 @@ final class FORUS_Service {
 			$expected = $snapshot;
 			$expected['amount'] = $operation['amount'];
 			if ( is_wp_error( $result ) || ! is_array( $result ) || ! FORUS_Policy::evidence_matches( $result, $expected ) || ( $result['refund'] ?? null ) !== $operation['refund'] || ! in_array( $result['status'] ?? null, array( 'pending', 'completed', 'failed' ), true ) ) {
+				$this->schedule( $order, true );
 				return $this->error( 'evidence' );
 			}
 			// No downgrade if an eventually consistent backend reports stale data.
@@ -171,6 +176,27 @@ final class FORUS_Service {
 				$operation['state'] = $result['status'];
 				$order->update_meta_data( '_forus_refund_operation', $operation );
 				$order->save();
+			}
+			if ( 'completed' === $operation['state'] && 'reconcile' === ( $operation['local_handling'] ?? '' ) ) {
+				// An intervening local/manual refund makes attribution ambiguous. Never guess or duplicate it.
+				if ( (string) $order->get_total_refunded() !== $operation['local_total'] ) {
+					return $this->error( 'refund_local_accounting_review' );
+				}
+				$local = wc_create_refund( array( 'order_id' => $id, 'amount' => $operation['amount'] / ( 10 ** $snapshot['decimals'] ),
+					'reason' => $operation['reason'] ?? 'FORUS confirmed refund', 'refund_payment' => false, 'restock_items' => false ) );
+				if ( is_wp_error( $local ) ) {
+					$this->schedule( $order, true );
+					return $this->error( 'refund_local_accounting_review' );
+				}
+				$local->update_meta_data( '_forus_refund_key', $operation['key'] );
+				$local->save();
+				$operation['local_handling'] = 'accounted';
+				$operation['local_refund_id'] = $local->get_id();
+				$order->update_meta_data( '_forus_refund_operation', $operation );
+				$order->add_order_note( 'FORUS confirmed refund recovered and recorded without another provider request.' );
+				$order->save();
+			} elseif ( in_array( $operation['state'], array( 'unknown', 'pending' ), true ) ) {
+				$this->schedule( $order, true );
 			}
 			return true;
 		} );
@@ -190,7 +216,7 @@ final class FORUS_Service {
 		}
 		$action = FORUS_Policy::transition( $order->get_status(), $evidence['status'] );
 		if ( 'paid' === $action ) {
-			$order->payment_complete( $snapshot['session'] );
+			$order->payment_complete( $evidence['provider_transaction_id'] ?? $snapshot['session'] );
 		} elseif ( in_array( $action, array( 'failed', 'cancelled' ), true ) ) {
 			$order->update_status( $action, 'FORUS authenticated payment status confirmed.' );
 		} elseif ( 'review' === $action ) {
@@ -244,9 +270,15 @@ final class FORUS_Service {
 					return $this->error( 'refund_reconciliation_required' );
 				}
 			}
-			$operation = array( 'key' => wp_generate_uuid4(), 'state' => 'unknown', 'amount' => $value, 'local_total' => $local_total );
+			$key = wp_generate_uuid4();
+			// The caller's UUID is also the lookup reference. A lost POST response remains recoverable by GET.
+			$operation = array( 'key' => $key, 'refund' => $key, 'state' => 'unknown', 'amount' => $value, 'local_total' => $local_total,
+				'local_handling' => 'reconcile', 'reason' => $reason );
 			$order->update_meta_data( '_forus_refund_operation', $operation );
+			$order->update_meta_data( '_forus_refund_reconcile_attempt', 0 );
 			$order->save();
+			// Schedule before the network call so PHP termination can still recover by the durable caller key.
+			$this->schedule( $order, true );
 			$result = $this->api->refund( $snapshot['session'], $value, $reason, $operation['key'] );
 			$expected = $snapshot;
 			$expected['amount'] = $value;
@@ -255,6 +287,10 @@ final class FORUS_Service {
 			}
 			$operation['refund'] = $result['refund'];
 			$operation['state'] = $result['status'];
+			if ( 'completed' === $operation['state'] ) {
+				// The normal WooCommerce caller records the local refund after process_refund returns true.
+				$operation['local_handling'] = 'woocommerce';
+			}
 			$order->update_meta_data( '_forus_refund_operation', $operation );
 			$order->save();
 			if ( 'completed' !== $operation['state'] ) {
@@ -303,13 +339,14 @@ final class FORUS_Service {
 		return strlen( wp_json_encode( $c['fields'] ) ) <= 32768;
 	}
 
-	private function schedule( $order ): void {
-		$attempt = (int) $order->get_meta( '_forus_reconcile_attempt' );
+	private function schedule( $order, bool $refund = false ): void {
+		$attempt_key = $refund ? '_forus_refund_reconcile_attempt' : '_forus_reconcile_attempt';
+		$attempt = (int) $order->get_meta( $attempt_key );
 		if ( $attempt >= 12 ) {
 			if ( 'yes' !== $order->get_meta( '_forus_recovery_exhausted' ) ) {
 				$order->update_meta_data( '_forus_recovery_exhausted', 'yes' );
 				$order->update_meta_data( '_forus_manual_review', 'yes' );
-				$order->add_order_note( 'FORUS automatic payment verification exhausted its retry limit. Check the provider payment record before fulfilment or another payment attempt.' );
+				$order->add_order_note( 'FORUS automatic verification exhausted its retry limit. Check the provider payment/refund record before another financial operation.' );
 				$order->save();
 			}
 			return;
@@ -326,7 +363,7 @@ final class FORUS_Service {
 			if ( ! $scheduled ) {
 				return;
 			}
-			$order->update_meta_data( '_forus_reconcile_attempt', $attempt + 1 );
+			$order->update_meta_data( $attempt_key, $attempt + 1 );
 			$order->save();
 		}
 	}
